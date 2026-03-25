@@ -1,0 +1,22 @@
+{
+  "total_documents": 16439,
+  "total_characters": 329117214,
+  "length_min": 737,
+  "length_max": 798241,
+  "length_mean": 20020.5,
+  "length_median": 12271.0,
+  "length_std": 29447.9,
+  "length_q25": 6667.5,
+  "length_q75": 22312.5,
+  "doc_types": {
+    "Quyết định (QĐ)": 8829,
+    "Khác": 5214,
+    "UBND": 1455,
+    "Thông tư (TT)": 388,
+    "Nghị định (NĐ)": 308,
+    "Chính phủ (CP)": 115,
+    "Chỉ thị (CT)": 79,
+    "Thông báo (TB)": 39,
+    "Nghị quyết (NQ)": 12
+  }
+}

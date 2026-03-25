@@ -1,0 +1,16 @@
+{
+  "chunking_config": {
+    "chunk_size": 2000,
+    "chunk_overlap": 50,
+    "method": "RecursiveCharacterTextSplitter"
+  },
+  "total_chunks": 188226,
+  "total_documents": 16439,
+  "chunks_per_doc_mean": 11.45,
+  "chunks_per_doc_median": 7.0,
+  "chunks_per_doc_max": 452,
+  "chunk_length_min": 20,
+  "chunk_length_max": 2000,
+  "chunk_length_mean": 1756.3,
+  "chunk_length_median": 1893.0
+}

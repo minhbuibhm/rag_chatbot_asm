@@ -1,0 +1,21 @@
+{
+  "total_qa_pairs": 2745,
+  "question": {
+    "length_char_min": 41,
+    "length_char_max": 322,
+    "length_char_mean": 141.0,
+    "length_char_median": 137.0,
+    "length_word_min": 11,
+    "length_word_max": 71,
+    "length_word_mean": 30.6
+  },
+  "answer": {
+    "length_char_min": 62,
+    "length_char_max": 9858,
+    "length_char_mean": 1619.3,
+    "length_char_median": 1426.0,
+    "length_word_min": 11,
+    "length_word_max": 2084,
+    "length_word_mean": 350.9
+  }
+}
