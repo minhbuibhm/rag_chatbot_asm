@@ -173,6 +173,7 @@ Demo hệ thống RAG trên một tập nhỏ câu hỏi mẫu:
 
 #### Format & Clarity (1 pt)
 - Report có cấu trúc rõ ràng, headings, figures/tables nếu cần, hướng dẫn reproducible.
+- The report should consist: Source code, Dataset, Manual such that readers can reproduce the submitted work for testing.
 
 ---
 

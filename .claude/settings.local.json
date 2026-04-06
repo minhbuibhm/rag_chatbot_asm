@@ -1,0 +1,21 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(python -c ':*)",
+      "Bash(python -)",
+      "Bash(python -c \"import json; nb = json.load\\(open\\('e:/minhbh/HCMUT/projects/252_llm_asm/Baseline.ipynb', encoding='utf-8'\\)\\); [print\\(f'CELL {i}:', ''.join\\(c[\\\\\"source\\\\\"]\\)[:400], '\\\\n---'\\) for i, c in enumerate\\(nb['cells']\\)]\")",
+      "Bash(python \"e:/minhbh/HCMUT/projects/252_llm_asm/read_nb.py\")",
+      "Bash(python -c \"print\\('no script'\\)\")",
+      "Bash(python read_nb.py)",
+      "Bash(python -c \"import json,sys; sys.stdout.reconfigure\\(encoding='utf-8'\\); d=json.load\\(sys.stdin\\); print\\(list\\(d.items\\(\\)\\)[:20]\\)\")",
+      "Bash(python read_stats.py)",
+      "Bash(python3 -c \"import json; nb=json.load\\(open\\('Baseline.ipynb','r',encoding='utf-8'\\)\\); [print\\(f'Cell {i} [{c[\\\\\"cell_type\\\\\"]}]: {repr\\(\\\\\"\\\\\".join\\(c[\\\\\"source\\\\\"]\\)[:150]\\)}\\\\n'\\) for i,c in enumerate\\(nb['cells']\\)]\")",
+      "Bash(python3)",
+      "Bash(python3 -X utf8)",
+      "Bash(python read_cell13.py)",
+      "Bash(rm read_cell13.py)",
+      "Bash(python -c \"import json; nb=json.load\\(open\\('e:/minhbh/HCMUT/projects/252_llm_asm/Baseline.ipynb'\\)\\); [print\\(f'Cell {i} \\({c[\\\\\"cell_type\\\\\"]}\\): {c[\\\\\"source\\\\\"][0][:80] if c[\\\\\"source\\\\\"] else \\\\\"\\(empty\\)\\\\\"}'\\) for i,c in enumerate\\(nb['cells']\\)]\")",
+      "WebSearch"
+    ]
+  }
+}
