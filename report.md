@@ -115,7 +115,7 @@ The baseline chunking strategy uses `RecursiveCharacterTextSplitter` with chunk_
 | Top-k retrieval | k = 5 |
 | LLM | `Qwen/Qwen1.5-1.8B` |
 | Framework | LangChain |
-| Evaluation set | 30 Q&A pairs (baseline run); 100 minimum required |
+| Evaluation set | 100 Q&A pairs |
 
 ### 3.2 Baseline Prompt Template
 
@@ -146,23 +146,21 @@ All metrics compare generated answer (`ŷ`) against ground-truth answer (`y`). W
 
 ### 3.4 Baseline Results
 
-Evaluated on 30 Q&A pairs (Cell 14 of `Baseline.ipynb`). Average inference: ~17s/question on Kaggle T4.
+Evaluated on 100 Q&A pairs (Cell 14 of `Baseline.ipynb`), with `return_full_text=False` and `max_new_tokens=256`.
 
 | Metric | Baseline Score |
 |--------|---------------|
-| Cosine Similarity | 0.6736 |
-| Jaccard Similarity | 0.1811 |
-| Token Overlap | 0.7058 |
-| BLEU | 0.0969 |
-| ROUGE-L | 0.0778 |
+| Cosine Similarity | 0.5697 |
+| Jaccard Similarity | 0.1307 |
+| Token Overlap | 0.1890 |
+| BLEU | 0.1462 |
+| ROUGE-L | 0.1537 |
 
 **Observations:**
-- **Cosine Similarity (0.67):** Moderate semantic similarity — the model captures the general topic but not precise legal content.
-- **Token Overlap (0.71):** High recall of ground-truth tokens, but this is likely inflated because `return_full_text=True` (default) includes the prompt+context in the output, overlapping with the answer.
-- **BLEU (0.10) & ROUGE-L (0.08):** Very low — generated answers do not match ground-truth phrasing or structure.
-- **Jaccard (0.18):** Low set overlap, confirming the generated text diverges significantly from ground truth.
-
-> **Note:** These scores were obtained with `df.head(30)`. Final evaluation will use `df.head(100)` as required. Additionally, the `return_full_text` issue in the LLM pipeline may be inflating Cosine Similarity and Token Overlap — this will be fixed in the improvement experiments.
+- **Cosine Similarity (0.57):** Moderate — the model captures the general topic but lacks precision on specific legal content.
+- **Token Overlap (0.19) & Jaccard (0.13):** Low lexical overlap with ground truth, indicating generated answers diverge significantly in wording.
+- **BLEU (0.15) & ROUGE-L (0.15):** Low but non-trivial — some n-gram and subsequence matches exist, suggesting partial content relevance.
+- The LLM tends to repeat the question or generate generic text rather than citing specific legal articles (visible in output logs).
 
 ---
 
@@ -176,7 +174,7 @@ Compare `vietnamese-sbert` (baseline) against models with stronger Vietnamese/mu
 
 | Embedding Model | Cosine Sim | Jaccard | Token Overlap | BLEU | ROUGE-L |
 |----------------|-----------|---------|--------------|------|---------|
-| vietnamese-sbert (baseline) | — | — | — | — | — |
+| vietnamese-sbert (baseline) | 0.5697 | 0.1307 | 0.1890 | 0.1462 | 0.1537 |
 | [candidate 1] | — | — | — | — | — |
 | [candidate 2] | — | — | — | — | — |
 
@@ -188,7 +186,7 @@ Test whether smaller chunks with larger overlap improve retrieval precision (at 
 
 | chunk_size | overlap | #chunks | Cosine Sim | ROUGE-L |
 |-----------|---------|---------|-----------|---------|
-| 2000 | 50 | 188K | — | — |
+| 2000 | 50 | 188K | 0.5697 | 0.1537 |
 | 1000 | 200 | ~350K | — | — |
 | 500 | 100 | ~650K | — | — |
 
@@ -200,7 +198,7 @@ Tune top-k and test hybrid retrieval (BM25 lexical + vector semantic).
 
 | Strategy | k | Cosine Sim | ROUGE-L |
 |----------|---|-----------|---------|
-| Vector only (baseline) | 5 | — | — |
+| Vector only (baseline) | 5 | 0.5697 | 0.1537 |
 | Vector only | 3/7/10 | — | — |
 | BM25 + Vector hybrid | 5 | — | — |
 
@@ -212,7 +210,7 @@ Test prompt variants targeting the legal QA domain.
 
 | Prompt Variant | Cosine Sim | ROUGE-L |
 |---------------|-----------|---------|
-| Baseline (simple instruction) | — | — |
+| Baseline (simple instruction) | 0.5697 | 0.1537 |
 | Chain-of-thought | — | — |
 | Few-shot with examples | — | — |
 
@@ -238,11 +236,11 @@ Test prompt variants targeting the legal QA domain.
 
 | Metric | Baseline | Improved | Δ |
 |--------|---------|---------|---|
-| Cosine Similarity | — | — | — |
-| Jaccard Similarity | — | — | — |
-| Token Overlap | — | — | — |
-| BLEU | — | — | — |
-| ROUGE-L | — | — | — |
+| Cosine Similarity | 0.5697 | — | — |
+| Jaccard Similarity | 0.1307 | — | — |
+| Token Overlap | 0.1890 | — | — |
+| BLEU | 0.1462 | — | — |
+| ROUGE-L | 0.1537 | — | — |
 
 *Evaluated on 100 Q&A pairs.*
 

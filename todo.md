@@ -12,22 +12,21 @@
 |-------|--------|------|
 | Data exploration | Done | Cells 5-9 chạy xong, charts saved |
 | FAISS build | Done | 176,504 chunks, ~1h50m on CPU |
-| Baseline evaluation | **Done (30 pairs)** | Cần re-run với 100 pairs + fix `return_full_text` |
+| Baseline evaluation | **Done (100 pairs)** | `return_full_text=False` applied |
 | Improvement experiments | **Not started** | `Improvements.ipynb` cần implement |
 | Report | Draft (Section 2+3 done) | Baseline scores đã điền, cần kết quả experiments |
 | Demo | Not started | Cần improved pipeline |
 
-**Baseline scores (30 pairs):** Cosine=0.674, Jaccard=0.181, TokenOverlap=0.706, BLEU=0.097, ROUGE-L=0.078
-**Known issue:** `return_full_text=True` đang inflate Token Overlap và Cosine Similarity.
+**Baseline scores (100 pairs, fixed):** Cosine=0.570, Jaccard=0.131, TokenOverlap=0.189, BLEU=0.146, ROUGE-L=0.154
 
 ---
 
 ## Execution Plan
 
 ### Step 1: Chạy baseline evaluation (prerequisite cho mọi thứ)
-- [x] Chạy baseline eval trên 30 pairs → scores saved to `rag_baseline_metrics.csv`
+- [x] Chạy baseline eval trên 100 pairs với `return_full_text=False`
 - [x] Ghi baseline scores vào report Section 3.4
-- [ ] Re-run với `df.head(100)` + fix `return_full_text=False` để có scores chính xác
+- [x] Cập nhật baseline rows trong report Section 4 + 5
 
 ### Step 2: Implement improvement experiments
 

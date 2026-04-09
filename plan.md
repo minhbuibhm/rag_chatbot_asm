@@ -8,7 +8,7 @@
 
 | Step | Description | Status |
 |------|-------------|--------|
-| 1 | Baseline evaluation | Done (30 pairs). Re-run needed: 100 pairs + fix `return_full_text` |
+| 1 | Baseline evaluation | **Done** (100 pairs, `return_full_text=False`) |
 | 2 | Improvement experiments | Not started. Code spec in `todo.md` Step 2 |
 | 3 | Best config final eval | Blocked by Step 2 |
 | 4 | Report + Demo | Blocked by Step 3 |
@@ -32,17 +32,16 @@ Baseline.ipynb (15 cells)          Improvements.ipynb (to create)
 - **Runtime:** Kaggle GPU T4 (9h session limit, ~30min idle timeout)
 - **Key timings (from baseline run):**
   - FAISS build: ~1h50m (CPU), ~30min (GPU)
-  - Eval 30 pairs: ~8.5min (~17s/question)
-  - Eval 100 pairs: ~28min estimated
+  - Eval 100 pairs: ~28min (~17s/question)
 - **Strategy:** Use N=50 for intermediate experiments, N=100 for final eval only
 
-## Known Issues to Fix in Improvements.ipynb
+## Fixed Issues (already applied in Baseline.ipynb)
 
-1. **`return_full_text=True` (Critical):** Baseline LLM output includes prompt+context → inflates Token Overlap and Cosine Similarity. Fix: add `pipeline_kwargs={"return_full_text": False}` to `HuggingFacePipeline`.
+1. ~~`return_full_text=True`~~ → Fixed: `pipeline_kwargs={"return_full_text": False}`
+2. ~~`max_length=1024` truncates context~~ → Fixed: uses `max_new_tokens=256`
+3. ~~`df.head(30)` insufficient~~ → Fixed: `df.head(100)`
 
-2. **`max_length=1024` truncates context:** 5 chunks × ~440 tokens = ~2200 tokens input, exceeds limit. Fix: remove `max_length`, use only `max_new_tokens=512`.
-
-3. **`df.head(30)` insufficient:** Requirement is minimum 100 pairs. Fix: `df.head(100)`.
+**Improvements.ipynb must carry these fixes forward** — copy the corrected LLM init from Cell 14.
 
 ---
 
