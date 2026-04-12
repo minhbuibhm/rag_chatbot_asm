@@ -15,7 +15,8 @@
       "Bash(python read_cell13.py)",
       "Bash(rm read_cell13.py)",
       "Bash(python -c \"import json; nb=json.load\\(open\\('e:/minhbh/HCMUT/projects/252_llm_asm/Baseline.ipynb'\\)\\); [print\\(f'Cell {i} \\({c[\\\\\"cell_type\\\\\"]}\\): {c[\\\\\"source\\\\\"][0][:80] if c[\\\\\"source\\\\\"] else \\\\\"\\(empty\\)\\\\\"}'\\) for i,c in enumerate\\(nb['cells']\\)]\")",
-      "WebSearch"
+      "WebSearch",
+      "Bash(python -X utf8)"
     ]
   }
 }
