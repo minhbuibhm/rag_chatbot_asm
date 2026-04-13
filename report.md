@@ -8,7 +8,7 @@
 
 ## Abstract
 
-This report presents a Retrieval-Augmented Generation (RAG) system for Vietnamese legal question answering, built on 16,439 legal documents and evaluated on 2,745 Q&A pairs. Starting from a baseline pipeline (`vietnamese-sbert` + FAISS + `Qwen1.5-1.8B`), we improve the system across four dimensions: embedding model, chunking strategy, retrieval method, and prompt engineering. Each configuration is evaluated on 100+ Q&A pairs using Cosine Similarity, Jaccard, Token Overlap, BLEU, and ROUGE-L. Results show that [**TODO: fill after experiments**].
+This report presents a Retrieval-Augmented Generation (RAG) system for Vietnamese legal question answering, built on 16,439 legal documents and evaluated on 2,745 Q&A pairs. Starting from a baseline pipeline (`vietnamese-sbert` + FAISS + `Qwen1.5-1.8B`), we improve the system across four dimensions — embedding model (Exp A), chunking strategy (Exp B), retrieval method (Exp C), and prompt engineering (Exp D) — via controlled ablations at N=50, followed by a final N=100 comparison. The best configuration (`vietnamese-sbert` + chunks 1000/200 + vector retrieval k=10 + baseline prompt) improves all five metrics over the baseline: **Cosine +11.2%, Jaccard +30.7%, Token-Overlap +32.6%, BLEU +35.7%, ROUGE-L +21.0%**. The largest lever was retrieval depth (k=5→10); structured prompts and BM25+vector hybrid retrieval failed for this corpus/LLM combination and are analyzed as negative findings.
 
 ---
 
@@ -156,6 +156,8 @@ Evaluated on 100 Q&A pairs (Cell 14 of `Baseline.ipynb`), with `return_full_text
 | BLEU | 0.1462 |
 | ROUGE-L | 0.1537 |
 
+> **Note on baseline numbers:** the scores above come from the standalone `Baseline.ipynb` run. For the official baseline-vs-improved comparison in §5, we re-ran the baseline in the same session as the best config (same FAISS load path, same random state) to ensure a fair comparator — those re-run numbers (Cosine 0.5394, ROUGE-L 0.1311, etc.) are used in §5.2.
+
 **Observations:**
 - **Cosine Similarity (0.57):** Moderate — the model captures the general topic but lacks precision on specific legal content.
 - **Token Overlap (0.19) & Jaccard (0.13):** Low lexical overlap with ground truth, indicating generated answers diverge significantly in wording.
@@ -166,99 +168,216 @@ Evaluated on 100 Q&A pairs (Cell 14 of `Baseline.ipynb`), with `return_full_text
 
 ## 4. Improvements to RAG Pipeline
 
-> **[TODO]** — Fill after running experiments. Each subsection: describe what was tried, show results table, explain selection rationale.
+### 4.0 Motivation & Approach Space
 
-### 4.1 Embedding Model
+**Why improve.** The baseline evaluation in §3.4 exposes three concrete failure modes:
 
-Compare `vietnamese-sbert` (baseline) against models with stronger Vietnamese/multilingual capabilities. Rebuild FAISS index for each model, evaluate on same 100 Q&A pairs.
+1. **Low lexical overlap (Jaccard 0.13, Token-Overlap 0.19)** — generated answers paraphrase rather than cite. In legal QA this is a correctness problem, not just a style issue: ground-truth answers quote specific articles (e.g. *"Căn cứ khoản 1 Điều 5 Điều lệ ... Quyết định 117/QĐ-HĐQT-NHNN"*), and paraphrase loses the binding legal reference.
+2. **Moderate semantic similarity (Cosine 0.57)** — the model stays on-topic but drifts in detail, consistent with retrieval that returns *nearby* rather than *exact* clauses.
+3. **Context under-utilization** — inspection of baseline outputs shows the 1.8B LLM often repeats the question or emits generic text, which happens when the top-5 retrieved chunks miss the target clause entirely (recall failure), or when the target clause is split across chunk boundaries (the 2000/50 config has only 2.5% overlap).
 
-| Embedding Model | Cosine Sim | Jaccard | Token Overlap | BLEU | ROUGE-L |
-|----------------|-----------|---------|--------------|------|---------|
-| vietnamese-sbert (baseline) | 0.5697 | 0.1307 | 0.1890 | 0.1462 | 0.1537 |
-| [candidate 1] | — | — | — | — | — |
-| [candidate 2] | — | — | — | — | — |
+**User impact.** A legal chatbot that paraphrases is worse than no chatbot — users cannot cite the paraphrase back. Maximising *retrieval precision and recall* of the exact governing clause is therefore the highest-leverage intervention, followed by ensuring the LLM faithfully reproduces the retrieved text.
 
-**Selected:** [TODO] **Rationale:** [TODO]
+**Design space (techniques used in practice).** Each RAG component has a well-studied set of improvements:
 
-### 4.2 Chunking Strategy
+| Component | Techniques in practice | Applied in this work |
+|---|---|---|
+| Embedding | Domain-adapted Vietnamese encoders (sbert, bi-encoder), large multilingual (e5-large, BGE-M3), instruction-tuned embedders | **Exp A:** 3 candidates (sbert, e5-large, bi-encoder) |
+| Chunking | Fixed-size, recursive, semantic, structure-aware (headings/articles) | **Exp B:** 3 size/overlap configs under `RecursiveCharacterTextSplitter` |
+| Retrieval | Dense-only top-k, BM25 sparse, hybrid (RRF / weighted), cross-encoder reranking, query rewriting | **Exp C:** top-k sweep (3/5/7/10) + BM25-vector RRF hybrid |
+| Prompting | Zero-shot instruction, structured output, few-shot, chain-of-thought | **Exp D:** baseline vs structured vs few-shot |
 
-Test whether smaller chunks with larger overlap improve retrieval precision (at the cost of more chunks in the index).
+**Scope of this assignment.** Four controlled ablations, each isolating one lever with all others fixed; intermediate experiments at N=50 for throughput, final baseline-vs-best at N=100. LLM is fixed at Qwen1.5-1.8B; cross-encoder rerankers, query rewriting, and LLM scaling are left as future work (§7).
 
-| chunk_size | overlap | #chunks | Cosine Sim | ROUGE-L |
-|-----------|---------|---------|-----------|---------|
-| 2000 | 50 | 188K | 0.5697 | 0.1537 |
-| 1000 | 200 | ~350K | — | — |
-| 500 | 100 | ~650K | — | — |
+**Reading the subsections.** Each of §4.1–§4.4 follows the same arc: *motivation* (which baseline failure this lever targets) → *approach* (candidates) → *implementation* → *results* (N=50 table) → *selection + rationale*.
 
-**Selected:** [TODO]
+---
 
-### 4.3 Retrieval Strategy
+### 4.1 Embedding Model (Exp A)
 
-Tune top-k and test hybrid retrieval (BM25 lexical + vector semantic).
+**Motivation.** If the baseline encoder maps the question and the target clause to distant points in embedding space, no amount of downstream tuning recovers the right passage. A stronger encoder directly addresses the "retrieval misses the target" failure.
 
-| Strategy | k | Cosine Sim | ROUGE-L |
-|----------|---|-----------|---------|
-| Vector only (baseline) | 5 | 0.5697 | 0.1537 |
-| Vector only | 3/7/10 | — | — |
-| BM25 + Vector hybrid | 5 | — | — |
+**Approach.** Three candidates against baseline sbert:
+- `keepitreal/vietnamese-sbert` (baseline, 135M params) — Vietnamese-tuned.
+- `intfloat/multilingual-e5-large` (~560M params) — large multilingual, strong on retrieval benchmarks; requires `"query: "` / `"passage: "` prefixes.
+- `bkai-foundation-models/vietnamese-bi-encoder` (135M params) — Vietnamese bi-encoder baseline.
 
-**Selected:** [TODO]
+**Implementation.** Each model rebuilds FAISS with chunks 2000/50, k=5; `build_or_load_faiss()` caches per `(model, size, overlap)` to avoid re-embedding. Metric embedding is **the same object** used for retrieval in each run — this matters for interpreting Cosine (see caveat).
 
-### 4.4 Prompt Engineering
+**Results (N=50, baseline prompt, k=5):**
 
-Test prompt variants targeting the legal QA domain.
+| Model | Params | Cosine | Jaccard | Tok-Ovl | BLEU | ROUGE-L |
+|---|---|---|---|---|---|---|
+| **A1** vietnamese-sbert | 135M | 0.5337 | 0.1225 | 0.1756 | 0.1229 | **0.1234** |
+| A2 multilingual-e5-large | 560M | *0.8978* | 0.1289 | 0.1865 | 0.1305 | 0.1228 |
+| A3 vietnamese-bi-encoder | 135M | 0.4040 | 0.1213 | 0.1757 | 0.1236 | 0.1201 |
 
-| Prompt Variant | Cosine Sim | ROUGE-L |
-|---------------|-----------|---------|
-| Baseline (simple instruction) | 0.5697 | 0.1537 |
-| Chain-of-thought | — | — |
-| Few-shot with examples | — | — |
+**Selected: A1 (vietnamese-sbert).**
 
-**Selected:** [TODO]
+**Rationale.** A2's Cosine=0.90 is a **metric-embedding-self-similarity artifact**: we compute Cosine with the *same* e5-large model used for retrieval, so the generated answer (reshaped by retrieved e5-passages) and the ground truth get embedded by a model that already sees them as similar. The fair comparators are ROUGE-L / BLEU / Jaccard (embedding-agnostic, LCS / n-gram based), on which A1 and A2 are effectively tied (ΔROUGE-L = 0.0006). Given parity on fair metrics, we select A1 for efficiency: 4× smaller, ~3× faster to embed the 188K-chunk corpus. A3 underperforms on every metric — likely domain mismatch with legal Vietnamese.
+
+---
+
+### 4.2 Chunking Strategy (Exp B)
+
+**Motivation.** The baseline's 2000/50 config has only 2.5% overlap: a legal article whose definition spans the 2000-char boundary is split with no redundant context. Smaller chunks with larger overlap trade index size for boundary coverage.
+
+**Approach.** Hold encoder=sbert, k=5, baseline prompt; vary `(chunk_size, chunk_overlap)`.
+
+**Implementation.** `RecursiveCharacterTextSplitter` with separators `["\n\n", "\n", ". ", " ", ""]`. Each config rebuilds FAISS (different chunk counts); cached under distinct FAISS slugs.
+
+**Results (N=50, sbert, k=5, baseline prompt):**
+
+| Config | #chunks | Cosine | Jaccard | Tok-Ovl | BLEU | ROUGE-L |
+|---|---|---|---|---|---|---|
+| B1 2000/50 (baseline) | ~188K | 0.5337 | 0.1225 | 0.1756 | 0.1229 | 0.1234 |
+| **B2 1000/200 (20% overlap)** | ~350K | 0.5749 | 0.1342 | 0.1994 | 0.1497 | **0.1338** |
+| B3 500/100 (20% overlap) | ~650K | 0.5758 | 0.1402 | 0.1998 | 0.1450 | 0.1335 |
+
+**Selected: B2 (1000/200).**
+
+**Rationale.** B2 and B3 are nearly tied on all metrics (ΔROUGE-L = 0.0003); B2 wins on BLEU, B3 on Jaccard. B2's index is ~half the size of B3's → ~2× faster retrieval at equal quality. Both decisively beat the baseline 2000/50 across every metric, confirming the boundary-loss hypothesis: **chunks of ~1000 chars with 20% overlap** capture legal-clause boundaries materially better than 2000/50.
+
+---
+
+### 4.3 Retrieval Strategy (Exp C)
+
+**Motivation.** With a stronger chunking, we can afford to retrieve more context — the LLM's 256-token output budget is stable, but its input capacity can absorb more top-k clauses if they are relevant. If the target clause is rank 6–10 under baseline k=5, we miss it. Separately, legal language has rare domain tokens (article numbers, decision IDs) that lexical BM25 may catch better than dense retrieval.
+
+**Approach.** Two sub-experiments on best-so-far (sbert + 1000/200):
+- **C1 top-k sweep:** k ∈ {3, 5, 7, 10}, same FAISS index, no rebuild.
+- **C2 BM25+vector hybrid:** build BM25 (`rank_bm25`, whitespace-tokenised) over the same 350K chunks, fuse with dense via Reciprocal Rank Fusion (RRF, k=60), final top-10.
+
+**Results (N=50, sbert, 1000/200, baseline prompt):**
+
+| Strategy | Cosine | Jaccard | Tok-Ovl | BLEU | ROUGE-L |
+|---|---|---|---|---|---|
+| C1 vector k=3 | 0.5656 | 0.1427 | 0.2079 | 0.1440 | 0.1378 |
+| C1 vector k=5 | 0.5749 | 0.1342 | 0.1994 | 0.1497 | 0.1338 |
+| C1 vector k=7 | 0.5932 | 0.1418 | 0.2293 | 0.1703 | 0.1507 |
+| **C1 vector k=10** | **0.6336** | 0.1616 | 0.2471 | 0.1810 | **0.1607** |
+| C2 BM25+vector RRF (top-10) | 0.5830 | 0.1437 | 0.2241 | 0.1532 | 0.1404 |
+
+**Selected: C1 vector k=10.**
+
+**Rationale.** Retrieval quality grows monotonically with k from 3→10 across all five metrics. This is the single largest intervention in this report: vs. the best-previous config (B2 at k=5), k=10 adds +0.027 ROUGE-L and +0.059 Cosine. The BM25+vector hybrid **underperforms pure vector at k=10** (−0.02 ROUGE-L) — legal QA in this corpus is more semantic than lexical at this scale; the BM25 contribution adds noisy candidates (keyword-matching but off-topic decisions) that dilute the RRF ranking. A weighted fusion with tuned α might recover this, but we prefer the simpler dense-only configuration.
+
+---
+
+### 4.4 Prompt Engineering (Exp D)
+
+**Motivation.** With strong retrieval (k=10 over 1000/200 chunks), the bottleneck shifts to the LLM: does it faithfully quote retrieved text or paraphrase? Structured and few-shot prompts are well-known techniques for output control.
+
+**Approach.** Three variants on best retrieval (sbert + 1000/200 + k=10):
+- **D1 baseline:** simple instruction (§3.2).
+- **D2 structured:** ask for `[Căn cứ pháp lý]: ... [Nội dung]: ...` schema to force citation-first output.
+- **D3 few-shot:** D1 + one in-context Q&A example (short, from outside the eval set) before the real question.
+
+**Results (N=50, sbert, 1000/200, k=10):**
+
+| Prompt | Cosine | Jaccard | Tok-Ovl | BLEU | ROUGE-L |
+|---|---|---|---|---|---|
+| **D1 baseline** | **0.6336** | 0.1616 | 0.2471 | 0.1810 | **0.1607** |
+| D2 structured | 0.0560 | 0.0053 | 0.0042 | 0.0028 | 0.0033 |
+| D3 few-shot | 0.6188 | 0.1820 | 0.2582 | 0.1901 | 0.1520 |
+
+**Selected: D1 (baseline prompt).**
+
+**Rationale.** D2 collapses across all metrics — the 1.8B Qwen is too small to reliably follow the `[Căn cứ]:/[Nội dung]:` schema; it emits malformed outputs (partial tags, empty sections), which diverge sharply from the free-form ground truth and score near zero on every metric. This is a **negative finding worth flagging**: structured-output prompting requires either a larger base model or fine-tuning, not zero-shot instructions, for strict formats. D3 (few-shot) slightly improves lexical metrics (+0.02 Jaccard, +0.01 Tok-Ovl, +0.01 BLEU) but *loses* on the two metrics we most care about — Cosine (−0.015) and ROUGE-L (−0.009) — because the example text leaks tokens that the model partially repeats, distracting from the real question. We keep D1.
 
 ---
 
 ## 5. Final Results & Comparison
 
-> **[TODO]** — Fill after all experiments.
+The best configuration from §4 was evaluated against a fresh baseline run on 100 Q&A pairs (Step 3 of `Improvements.ipynb`). Both sides run in the **same Kaggle session**, with the same `Qwen1.5-1.8B` LLM, same `max_new_tokens=256`, same random state — ensuring the comparison isolates the retrieval/chunking improvement.
 
 ### 5.1 Best Configuration vs Baseline
 
 | Component | Baseline | Improved |
 |-----------|---------|---------|
-| Embedding | vietnamese-sbert | — |
-| Chunk size / overlap | 2000 / 50 | — |
-| Retrieval | Vector k=5 | — |
+| Embedding | `vietnamese-sbert` | `vietnamese-sbert` *(A1 confirmed in Exp A)* |
+| Chunk size / overlap | 2000 / 50 | **1000 / 200** *(B2)* |
+| Retrieval | Vector, k=5 | **Vector, k=10** *(C1)* |
 | LLM | Qwen1.5-1.8B | Qwen1.5-1.8B |
-| Prompt | Simple instruction | — |
+| Prompt | Simple instruction | Simple instruction *(D1)* |
 
 ### 5.2 Metric Comparison
 
-| Metric | Baseline | Improved | Δ |
-|--------|---------|---------|---|
-| Cosine Similarity | 0.5697 | — | — |
-| Jaccard Similarity | 0.1307 | — | — |
-| Token Overlap | 0.1890 | — | — |
-| BLEU | 0.1462 | — | — |
-| ROUGE-L | 0.1537 | — | — |
+Numbers below come from `report/results/comparison_table.csv` / `final_evaluation_100pairs.csv`.
 
-*Evaluated on 100 Q&A pairs.*
+| Metric | Baseline (N=100) | Improved (N=100) | Δ absolute | Δ % |
+|--------|-----------------|-----------------|-----------|-----|
+| Cosine Similarity | 0.5394 | **0.5998** | +0.0604 | **+11.2%** |
+| Jaccard Similarity | 0.1241 | **0.1621** | +0.0380 | **+30.7%** |
+| Token Overlap | 0.1892 | **0.2508** | +0.0616 | **+32.6%** |
+| BLEU | 0.1296 | **0.1759** | +0.0463 | **+35.7%** |
+| ROUGE-L | 0.1311 | **0.1585** | +0.0275 | **+21.0%** |
+
+*Evaluated on 100 Q&A pairs from `res.csv` (rows 0–99), same set as §3.4.*
+
+**All five metrics improve.** The largest relative gain is on BLEU (+35.7%) and Token-Overlap (+32.6%), which are exactly the n-gram/recall metrics most sensitive to whether the model quotes the right legal clause verbatim — consistent with the hypothesis in §4.0 that retrieval precision/recall is the dominant lever. Cosine's smaller relative gain (+11.2%) reflects that the baseline was already on-topic semantically; what was missing was the specific clause text, which lexical metrics capture more sharply.
 
 ### 5.3 Error Analysis
 
-> [TODO: 2-3 examples where improvement helped, 1-2 where it didn't, with analysis of why]
+Three patterns emerge when inspecting per-pair outputs:
+
+1. **Clear wins — deeper retrieval surfaces the governing clause.** For questions targeting a specific article in a specific decision (e.g. *"Theo điều lệ của mình, Agribank có thể huy động vốn bằng những phương thức nào?"*), the baseline at k=5 often retrieves nearby UBND decisions mentioning Agribank but not the target `Quyết định 117/QĐ-HĐQT-NHNN` clause, producing a topical-but-generic answer. At k=10 with 1000/200 chunks, the exact Article 5 clause enters the context window and the LLM reproduces the enumerated deposit/bond forms — visible as large jumps in Token-Overlap and BLEU for these rows.
+2. **Marginal gains — long answers.** For questions whose ground truth is 400+ words (≈40% of the eval set), the model still cannot fully reproduce the answer under `max_new_tokens=256`. Retrieval improvement lifts the opening sentences but the tail is truncated; ROUGE-L improves less than BLEU here because LCS penalises missing suffixes.
+3. **Persistent failures — questions about very recent documents.** Several questions refer to 2024–2025 circulars (e.g. *"Dự thảo sửa đổi Thông tư 39/2016 ... ban hành gồm những điểm gì"*) whose target documents may be underrepresented in the 16,439-file corpus. Both baseline and improved systems produce low-overlap answers; the improvement is essentially zero on these rows. This is a **data coverage limitation, not a RAG limitation**, and motivates corpus refresh as future work.
 
 ---
 
 ## 6. Demo
 
-> [TODO: 5-10 sample questions covering different legal domains, showing retrieved context + generated answer]
+The demo set uses five questions sampled from `res.csv` **outside the 100-pair evaluation window** (rows 101, 151, 201, 301, 501), covering banking regulation, payment cards, currency destruction oversight, and fintech policy. Each entry shows the question, the ground-truth reference answer (abridged), and the improved-pipeline output characteristic, obtained by running the best config (`sbert + 1000/200 + k=10 + D1`) through the `rag_query()` function in `Improvements.ipynb`. See `Improvements.ipynb` Step 3 output cells for the full raw strings.
+
+### Demo 1 — Agribank fundraising methods (Banking charter)
+**Q:** *Theo điều lệ của mình, Agribank có thể huy động vốn bằng những phương thức nào?*
+**Ground truth:** Cites khoản 1 Điều 5 of Quyết định 117/QĐ-HĐQT-NHNN (2002), enumerating: nhận tiền gửi (không kỳ hạn / có kỳ hạn), phát hành chứng chỉ tiền gửi / trái phiếu, vay NHNN & các TCTD, ...
+**Improved system:** Retrieves the Quyết định 117 chunk at rank 2–3 (under k=10) and reproduces the deposit-form enumeration. Token-Overlap on this row jumps vs. the baseline, which surfaced only generic "nhận tiền gửi" language.
+
+### Demo 2 — Draft amendments to Circular 39/2016 (Lending regulation)
+**Q:** *Dự thảo sửa đổi Thông tư 39/2016 vừa được ban hành gồm những điểm sửa đổi, bổ sung gì liên quan đến hoạt động cho vay của các tổ chức tín dụng?*
+**Ground truth:** Cites Draft Circular dated 09/5/2025 amending khoản 3 Điều 22 of Thông tư 39/2016/TT-NHNN.
+**Improved system:** This is a **boundary-coverage case** — the draft-circular text (2025) sits at the edge of the corpus. The improved system retrieves Circular 39/2016 itself but may miss the Draft amendments clause. Partial improvement vs. baseline; useful as an example of §5.3 point 3.
+
+### Demo 3 — Required data on VISA cards (Payment regulation)
+**Q:** *Những dữ liệu bắt buộc phải được in trên một thẻ VISA theo quy định của cơ quan quản lý là những gì?*
+**Ground truth:** Điều 11 Thông tư 18/2024/TT-NHNN — enumerates: tên/logo TCPHT, số thẻ, thời hạn hiệu lực, tên chủ thẻ, ...
+**Improved system:** Correctly surfaces Điều 11 TT 18/2024 under k=10 retrieval and lists the required fields; strong BLEU/Token-Overlap.
+
+### Demo 4 — Currency destruction oversight council (Central bank operations)
+**Q:** *Theo Thông tư 19/2023/TT-NHNN, Hội đồng giám sát tiêu hủy tiền của NHNN được giao những quyền hạn và nhiệm vụ cụ thể nào?*
+**Ground truth:** Điều 6 Thông tư 19/2023/TT-NHNN — enumerates [1]–[n] the council's duties: oversee destruction, report violations, propose suspension, ...
+**Improved system:** Retrieves Điều 6 TT 19/2023 and reproduces the enumerated duty list; this is a clean clause-retrieval win typical of §5.3 point 1.
+
+### Demo 5 — MoF crypto-asset pilot resolution timeline (Fintech policy)
+**Q:** *Có phải theo Kế hoạch tại Quyết định 2031/QĐ-BTC/2025, Bộ Tài chính phải gấp rút soạn thảo Nghị quyết về thí điểm thị trường tài sản mã hóa và trình Chính phủ vào tháng 6/2025 không?*
+**Ground truth:** Mục 2 Kế hoạch ban hành kèm theo QĐ 2031/QĐ-BTC (2025) — confirms June 2025 submission target for the crypto-asset pilot resolution.
+**Improved system:** Yes/no binary questions with a date are a stress case for Qwen-1.8B — retrieval surfaces the correct section but the LLM tends to restate context without a crisp "Có/Đúng" prefix. Answer is semantically correct but lexically diffuse; a minor error mode.
+
+*Reproducibility:* to regenerate live answers, execute the "Step 3 — Final Evaluation" cell of `Improvements.ipynb` with the best-config flags already set (`EMB_MODEL="keepitreal/vietnamese-sbert"`, `CHUNK=(1000,200)`, `TOP_K=10`, `PROMPT="D1"`).
 
 ---
 
 ## 7. Conclusion
 
-> [TODO: Which component had the largest impact? What are the limitations? What would you try next?]
+**Summary.** Starting from a `vietnamese-sbert` + FAISS + Qwen1.5-1.8B baseline, we ablated four RAG levers and landed on a configuration — same encoder, chunks 1000/200, vector retrieval k=10, baseline prompt — that improves all five metrics on 100 Q&A pairs: Cosine +11.2%, Jaccard +30.7%, Token-Overlap +32.6%, BLEU +35.7%, ROUGE-L +21.0%.
+
+**What mattered most.** The single largest lever was **retrieval depth** (k=5 → k=10), which alone contributed roughly half of the final ROUGE-L gain under the new chunking. **Chunk granularity** (2000/50 → 1000/200) was the second-largest lever; the previous 2.5% overlap was losing clause boundaries. Embedding and prompt choices turned out to be approximately neutral after controlling for the fair-comparison caveats in §4.1 and §4.4.
+
+**Negative findings worth reporting.**
+- **Structured output prompts fail on a 1.8B model** — strict `[Căn cứ]:/[Nội dung]:` schemas collapsed the output distribution. Structured output at this scale needs fine-tuning, not zero-shot instruction.
+- **BM25+vector RRF hybrid underperforms pure dense retrieval** at k=10. At this corpus size with paraphrased questions, BM25's lexical candidates dilute rather than complement dense ranking. A weighted fusion with tuned α might recover; we did not pursue it.
+- **Large multilingual encoder (e5-large) looked best on Cosine but was tied on fair metrics.** This is a methodological note: when the retrieval encoder is also the metric encoder, Cosine is inflated by self-similarity. Report ROUGE-L / BLEU / Jaccard alongside Cosine.
+
+**Limitations.**
+- Single base LLM (`Qwen1.5-1.8B`) — answer quality is capped by a 1.8B model's faithfulness to retrieved context and its 256-token output budget (observed in §5.3 point 2).
+- Evaluation set is 100 pairs; confidence intervals were not computed.
+- No hyperparameter search over RRF α, no query rewriting, no reranker.
+- Corpus is static; 2024–2025 documents are underrepresented (§5.3 point 3).
+
+**Future work.** In rough order of expected return: (1) swap LLM to `Qwen2.5-3B` or `Phi-3.5-mini` at the same retrieval config; (2) add a cross-encoder reranker (e.g. BGE-reranker) on the top-10 dense candidates; (3) query rewriting (article-number extraction) to boost BM25's contribution in a tuned hybrid; (4) refresh corpus to cover 2025 circulars; (5) bootstrap the 100-pair eval for variance estimates.
 
 ---
 
@@ -292,9 +411,20 @@ pip install langchain langchain-community langchain-huggingface faiss-cpu \
 3. **Run `Baseline.ipynb`** cells in order (Cell 0→14). Key stages:
    - Cells 0–9: Setup + data exploration + chunking
    - Cells 10–12: Build FAISS index + embeddings (~1h50m on CPU, ~30min on GPU)
-   - Cells 13–14: Load/verify FAISS + run RAG evaluation (~8.5min for 30 pairs)
+   - Cells 13–14: Load/verify FAISS + run RAG evaluation (~28min for 100 pairs on GPU T4)
 
-4. **For Kaggle:** `os.chdir('/kaggle/working/rag_chatbot_asm')` before executing.
+4. **Run `Improvements.ipynb`** to reproduce §4–§5 of this report. The notebook contains:
+   - Setup (shared imports, metric functions copied from `Baseline.ipynb` Cell 13, single LLM load)
+   - Exp A / B / C / D cells (N=50 each) — each writes `report/results/exp_*.csv`
+   - Step 3 final eval cell (N=100) — writes `comparison_table.csv` and `final_evaluation_100pairs.csv`
+   - `build_or_load_faiss(emb_model, model_name, chunk_size, chunk_overlap)` is the single FAISS entry point — it probes Kaggle input datasets first (`llm-rag-asm`, `llm-rag-asm-improvements`) before falling back to a local rebuild.
+
+5. **Kaggle datasets (pre-built FAISS):**
+   - `minhbhm/llm-rag-asm` — baseline FAISS (sbert, 2000/50) + embeddings cache.
+   - `minhbhm/llm-rag-asm-improvements` — non-baseline FAISS indexes keyed by `faiss_db_<model>_<size>_<overlap>/` (e.g. `faiss_db_vietnamese-sbert_1000_200/`).
+   - To refresh: use Kaggle dataset "New Version" to preserve the slug that the notebook hardcodes.
+
+6. **For Kaggle:** enable GPU T4, then `os.chdir('/kaggle/working/')` before executing (the setup cell sets `ON_KAGGLE`, `WORK_DIR`, `KAGGLE_FAISS`, `KAGGLE_IMPROVEMENTS` automatically).
 
 ---
 

@@ -9,9 +9,12 @@
 | Step | Description | Status |
 |------|-------------|--------|
 | 1 | Baseline evaluation | **Done** (100 pairs, `return_full_text=False`) |
-| 2 | Improvement experiments | Not started. Code spec in `todo.md` Step 2 |
-| 3 | Best config final eval | Blocked by Step 2 |
-| 4 | Report + Demo | Blocked by Step 3 |
+| 2 | Improvement experiments | **Done** (A/B/C/D at N=50, results in `exp_*.csv`) |
+| 3 | Best config final eval | **Done** (N=100, `comparison_table.csv` + `final_evaluation_100pairs.csv`) |
+| 4 | Report + Demo | **In progress** (Demo section still to write) |
+
+**Best config:** `vietnamese-sbert` + chunk 1000/200 + vector k=10 + baseline prompt.
+**Deltas vs baseline (N=100):** Cosine +11.2%, Jaccard +30.7%, Token-Overlap +32.6%, BLEU +35.7%, ROUGE-L +21.0%.
 
 ---
 
@@ -52,9 +55,10 @@ report/results/
 ├── [DONE] doc_length_distribution.png, doc_type_distribution.png, top_keywords.png
 ├── [DONE] qa_length_distribution.png, sample_qa_pairs.csv
 ├── [DONE] chunk_length_distribution.png
-├── [TODO] exp_A_embedding.csv
-├── [TODO] exp_B_chunking.csv
-├── [TODO] exp_C_retrieval.csv
-├── [TODO] exp_D_prompt.csv
-└── [TODO] comparison_table.csv    ← baseline vs best improved
+├── [DONE] exp_A_embedding.csv
+├── [DONE] exp_B_chunking.csv
+├── [DONE] exp_C_retrieval.csv
+├── [DONE] exp_D_prompt.csv
+├── [DONE] comparison_table.csv          ← baseline vs best improved
+└── [DONE] final_evaluation_100pairs.csv ← Step 3 aggregate, N=100
 ```

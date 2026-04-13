@@ -13,9 +13,10 @@
 | Data exploration | Done | Cells 5-9 chạy xong, charts saved |
 | FAISS build | Done | 176,504 chunks, ~1h50m on CPU |
 | Baseline evaluation | **Done (100 pairs)** | `return_full_text=False` applied |
-| Improvement experiments | **Not started** | `Improvements.ipynb` cần implement |
-| Report | Draft (Section 2+3 done) | Baseline scores đã điền, cần kết quả experiments |
-| Demo | Not started | Cần improved pipeline |
+| Improvement experiments | **Done** | A/B/C/D at N=50, results in `exp_*.csv` |
+| Final eval 100 pairs | **Done** | `comparison_table.csv`, all 5 metrics improved (+11% to +36%) |
+| Report | **In progress** | §1–§5 filled; §6 Demo + §7 Conclusion pending |
+| Demo | Not started | Sample Q&A section of report |
 
 **Baseline scores (100 pairs, fixed):** Cosine=0.570, Jaccard=0.131, TokenOverlap=0.189, BLEU=0.146, ROUGE-L=0.154
 
@@ -40,7 +41,7 @@
 ---
 
 **Experiment A — Embedding Model**
-- [ ] Implement và chạy
+- [x] Implement và chạy
 
 Thử lần lượt, mỗi model: load embeddings → build FAISS → eval 100 pairs → lưu scores.
 ```
@@ -52,7 +53,7 @@ Candidates: intfloat/multilingual-e5-large, bkai-foundation-models/vietnamese-bi
 ---
 
 **Experiment B — Chunking Strategy**
-- [ ] Implement và chạy
+- [x] Implement và chạy
 
 Dùng embedding model tốt nhất từ Experiment A. Thử 3 configs với cùng splitter (`RecursiveCharacterTextSplitter`):
 ```
@@ -65,7 +66,7 @@ Dùng embedding model tốt nhất từ Experiment A. Thử 3 configs với cùn
 ---
 
 **Experiment C — Retrieval Strategy**
-- [ ] Implement và chạy
+- [x] Implement và chạy
 
 Dùng best config từ A+B. Hai nhóm:
 
@@ -81,7 +82,7 @@ from rank_bm25 import BM25Okapi
 ---
 
 **Experiment D — Prompt Engineering**
-- [ ] Implement và chạy
+- [x] Implement và chạy
 
 Thử 3 variants trên best config từ A+B+C. Chỉ thay phần prompt trong `rag_query()`:
 ```
@@ -101,13 +102,14 @@ D3 (few-shot): thêm 1 ví dụ Q&A vào prompt trước câu hỏi thực
 - `report/results/comparison_table.csv` — bảng tổng hợp baseline vs best improved
 
 ### Step 3: Chọn best config, chạy final evaluation
-- [ ] Combine best components từ Step 2
-- [ ] Chạy full eval >= 100 pairs, tạo bảng so sánh baseline vs improved
+- [x] Combine best components từ Step 2 → **sbert + 1000/200 + k=10 + baseline prompt**
+- [x] Chạy full eval = 100 pairs, tạo bảng so sánh baseline vs improved
+  > Deltas: Cosine +11.2%, Jaccard +30.7%, Tok-Ovl +32.6%, BLEU +35.7%, ROUGE-L +21.0%
 
 ### Step 4: Hoàn thiện report & demo
-- [ ] Điền kết quả vào report Sections 3.4, 4, 5
+- [x] Điền kết quả vào report Sections 3.4, 4, 5
 - [ ] Viết Section 6 (Demo): chọn 5-10 câu hỏi mẫu, show input/output
-- [ ] Viết Section 7 (Conclusion)
+- [x] Viết Section 7 (Conclusion)
 - [ ] Export PDF
 
 ---

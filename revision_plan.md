@@ -80,6 +80,31 @@
 
 **§3.4 Baseline Results** — add a small footnote: results here come from the standalone `Baseline.ipynb` run. For the official baseline-vs-improved comparison in §5, we re-ran the baseline in the same session as the best config (see Step 3 numbers).
 
+#### 2.1.0 §4 structural rewrite (narrative arc before tables)
+
+The current `report.md` §4 is four sibling subsections (4.1–4.4) that each jump straight to a result table. That wastes the 3-pt "Method" rubric, which rewards explanation of *why* and *what was tried*, not just numbers. Restructure §4 with a shared opening, then keep 4.1–4.4 per lever:
+
+**New §4.0 — Motivation & Approach Space** (~½ page, new content)
+- **Why improve (from baseline observations in §3.4):**
+  - Cosine 0.57 / ROUGE-L 0.15 — answers are on-topic but lexically divergent from ground truth; the LLM paraphrases instead of quoting legal articles.
+  - Failure modes visible in logs: (a) retrieval misses the exact clause, (b) the 1.8B LLM hallucinates or repeats the question when context is weak, (c) chunk boundaries truncate multi-sentence legal definitions (2000-char chunks, 50-char overlap = 2.5%).
+  - **User impact:** a legal-QA chatbot that paraphrases is worse than useless — users need verbatim citations of articles. Improving retrieval precision + recall is the highest-leverage intervention.
+- **Design space (what's used in practice):**
+  - *Embedding:* domain-adapted Vietnamese encoders (sbert, bi-encoder) vs. large multilingual (e5-large, BGE-M3); trade-off = quality vs. size/latency.
+  - *Chunking:* fixed-size, recursive, semantic, document-structure-aware. Overlap controls boundary loss.
+  - *Retrieval:* dense-only, sparse-only (BM25), hybrid (RRF / weighted), reranking (cross-encoder).
+  - *Prompting:* zero-shot instruction, structured output, few-shot, chain-of-thought.
+- **Scope for this assignment:** four controlled experiments (A–D) isolating one lever at a time, under a fixed LLM (Qwen-1.8B) and fixed N=50 intermediate / N=100 final eval budget. Out of scope: LLM swap, learned rerankers, query rewriting (noted in §7 future work).
+
+**§4.1–§4.4 — per-lever subsections.** Each follows the same mini-arc so the narrative is consistent:
+1. *Motivation* (1–2 sentences — what baseline problem this lever targets)
+2. *Approach* (1–2 sentences — candidates considered, what we actually tried, why)
+3. *Implementation note* (1 sentence — FAISS rebuild / parameter change / prompt text)
+4. *Results table* (already specified below)
+5. *Selection + rationale* (already specified below)
+
+This lets §4.0 carry the "design space" framing once, and each subsection stays tight on its own lever without re-introducing motivation.
+
 **§4.1 Embedding Model** — fill table with A1/A2/A3 numbers above. Selection rationale:
 - Ranked by ROUGE-L, which uses LCS of normalized tokens (metric-embedding-agnostic).
 - A2's Cosine=0.90 is suspicious — its own embedding is also used as the similarity metric, inflating scores. Fair comparison via ROUGE-L/BLEU/Jaccard shows A1 and A2 are nearly tied; A1 is kept as it is significantly smaller (540M vs 2.24G) and faster.
@@ -127,19 +152,20 @@
 
 ## 3. Open Questions for Reviewer
 
-1. **Baseline number mismatch (0.5697 vs 0.5394 Cosine):** OK to use Step-3 re-run numbers as the official baseline in §5? (My recommendation: yes, with a footnote.)
-2. **A2 Cosine anomaly:** Should the report explicitly discuss the metric-embedding-self-similarity issue, or just note "A1 selected for efficiency at comparable quality"? (I lean toward explicit — shows understanding.)
-3. **Demo section (§6):** Do you want me to (a) just write a script to pull examples and leave blanks, or (b) actually run 5–10 queries end-to-end through the improved pipeline? Option (b) requires re-running the pipeline locally / on Kaggle.
-4. **Error analysis (§5.3):** Should I pick examples by diffing baseline vs improved answers in `final_evaluation_100pairs.csv`? The CSV has per-pair metrics — I can pick largest positive/negative deltas.
+1. **Baseline number mismatch (0.5697 vs 0.5394 Cosine):** use Step-3 re-run as official baseline in §5, keep §3.4 with footnote. **Default: yes.**
+2. **A2 Cosine anomaly:** discuss metric-embedding-self-similarity issue explicitly in §4.1 — demonstrates methodological awareness. **Default: explicit.**
+3. **Demo section (§6):** default to option (a) — sample questions + ground truth from `res.csv` rows outside eval set, pair with *already-generated* improved answers from `final_evaluation_100pairs.csv` where possible. Full end-to-end re-run (option b) only if the user explicitly wants fresh retrieved chunks shown.
+4. **Error analysis (§5.3):** pick per-pair rows from `final_evaluation_100pairs.csv` by largest positive/negative baseline→improved deltas. **Default: yes.**
 
 ---
 
 ## 4. Execution Order (after approval)
 
 1. Update `todo.md` and `plan.md` status rows (quick, low risk).
-2. Fill `report.md` §4.1–4.4 tables and rationales (from numbers above).
-3. Fill `report.md` §5.1–5.2 final comparison.
-4. Write `report.md` §5.3 error analysis — **may need to read CSV rows**.
-5. Write `report.md` §6 demo — **needs clarification per Q3**.
-6. Write `report.md` §7 conclusion + §1 abstract.
-7. Touch up §8 reproducibility with Improvements.ipynb info.
+2. **Insert `report.md` §4.0** (motivation + design space) — new content per §2.1.0.
+3. Fill `report.md` §4.1–4.4 with the per-lever mini-arc (motivation → approach → impl → table → selection).
+4. Fill `report.md` §5.1–5.2 final comparison (Step-3 baseline numbers).
+5. Write `report.md` §5.3 error analysis — read CSV rows by delta.
+6. Write `report.md` §6 demo — pull Q&A from `res.csv` outside eval set; reuse improved answers from `final_evaluation_100pairs.csv` where possible.
+7. Write `report.md` §7 conclusion + §1 abstract.
+8. Touch up §8 reproducibility with Improvements.ipynb + Kaggle dataset info.
